@@ -1,0 +1,70 @@
+model EMMR_letturadafile
+uses "mmxprs", "mmsystem"
+
+parameters 
+	n = 50				! Scegliamo noi n siti e p hub
+    p = 10           
+end-parameters    
+
+declarations
+	N = {1..n}							! Insieme dei siti da 1 a n
+    w_ij: array(N,N) of real            ! Numero di oggetti da trasportare da i a j
+    c_ijkm: array(N,N,N,N) of real      ! Costo di trasporto un unità prodotto da i a j attraverso k e m in quest'ordine
+    x_ik: array(N,N) of mpvar    		! Variabili binarie per l'assegnazione dei siti agli hub, 1 assegnato 0 non assegnato
+    S_i: array(N) of mpvar      		! Costi complessivi di trasporto da/per i per/da ogni j con j>i 
+    C_ijkm: array(N,N,N,N) of real 		! Costi di trasporto totale tra siti i e j
+end-declarations
+
+initializations from "valori_"+n+".dat"
+    w_ij
+    c_ijkm
+end-initializations
+
+! Definizione delle C_ijkm
+
+forall(i in N, j in N, k in N, m in N) do
+    C_ijkm(i,j,k,m) := (w_ij(i,j)*c_ijkm(i,j,k,m)) + (w_ij(j,i)*c_ijkm(j,i,m,k))
+end-do
+
+! Vincolo (2)
+sum(k in N) x_ik(k,k) = p
+
+! Vincolo (3)
+forall(i in N, k in N | i <> k) do
+    x_ik(i,k) <= x_ik(k,k)
+end-do
+
+! Vincolo (4)
+forall(i in N) do
+    sum(k in N) (x_ik(i,k)) = 1
+end-do
+
+! Vincolo (5)
+forall(i in N, k in N) do
+    x_ik(i,k) is_binary
+end-do
+
+! Vincolo (7)
+forall(i in N, k in N) do
+    S_i(i) >= sum(j in N | j > i, m in N) (C_ijkm(i,j,k,m) * (x_ik(i,k) + x_ik(j,m) - 1))
+end-do
+
+forall(i in N) do
+    S_i(i) >= 0
+end-do
+
+! Definizione della funzione obiettivo
+obb := sum(i in N) (S_i(i))
+
+setparam("XPRS_MAXTIME", -180)
+start_time:=time(SYS_NOW)
+
+! Risoluzione del modello
+minimize(obb)
+
+! output
+end_time:= time(SYS_NOW) 
+writeln(" run time= ",end_time-start_time," ms ")
+writeln(" la FO vale ", getobjval )
+
+end-model
